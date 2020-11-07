@@ -1,0 +1,609 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+#find number of features going into models and overlap between output
+library(tidyverse)
+library(UpSetR)
+library(stringr)
+library(cowplot)
+library(ggplot2)
+library(tidyr)
+library(magrittr)
+library(ggnewscale)
+library(ggalluvial)
+library(phylobase)
+library(reshape2)
+library(phytools)
+library(broom)
+library(taxonomizr)
+library(ecodist)
+library(ggtree)
+library(readxl)
+library(pheatmap)
+library(rlang) 
+library(circlize)
+library(metafor)
+library(meta)
+library(lme4)
+library(ggpubr)
+library(lmerTest)
+library(broom.mixed)
+
+
+theme_set(theme_cowplot())
+``` 
+
+```{r}
+setwd('~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/')
+
+#load all data
+counts <- list()
+files=list.files()
+files=files[grep('90',files)]
+files=files[grep('rds',files)]
+metaph=list()
+voeoutput=list()
+voesummaryoutput=list()
+for(file in files){
+  f=readRDS(file)
+  if('meta_analyis_output' %in% names(f)){
+    initial_associations=f$meta_analyis_output %>% select(feature,estimate,p.val,BY,CI_95_lower,CI_95_upper)
+    colnames(initial_associations)[3]='p.value'
+  }
+  else{
+    initial_associations=f$initial_association_output %>% mutate(CI_95_lower = estimate - 1.96*std.error,CI_95_upper = estimate + 1.96*std.error) %>% select(feature,estimate,p.value,BY,CI_95_lower,CI_95_upper)
+  }
+  counts[str_replace(file,'_90.rds','')]=nrow(initial_associations)
+  initial_associations$filename=file
+  initial_associations$phenotype=toupper(str_replace(file,'_90.rds',''))
+  metaph[[file]]=initial_associations
+  voe=f$vibration_output[['data']]
+  voe$filename=file
+  voe$phenotype=toupper(str_replace(file,'_90.rds',''))
+  voeoutput[[file]]=voe
+  voe_summary_output = f$vibration_output[['summarized_vibration_output']]
+  voe_summary_output$filename=file
+  voe_summary_output$phenotype=toupper(str_replace(file,'_90.rds',''))
+  voesummaryoutput[[file]] = voe_summary_output
+}
+
+
+metaph = bind_rows(metaph)
+metaph=metaph %>% filter(phenotype == 'ACVD' | phenotype == 'CRC'  | phenotype == 'T2D'  |phenotype == 'T1D' |phenotype == 'IBD' |phenotype == 'CIRRHOSIS' )
+metaph = metaph %>% filter(!grepl('GCF',feature ))
+
+metaph = metaph %>% mutate(adj=p.adjust(p.value,method='BY'))
+fdr_sig = metaph %>% filter(adj<=.05) %>% select(p.value) %>% max
+
+voe = bind_rows(voeoutput)
+voesummaryoutput = bind_rows(voesummaryoutput)
+
+
+litvibs=readRDS('lit_review_bugs_of_interest.rds') %>% select(-feature) %>% mutate(phenotype=if_else(phenotype=='CIRR','CIRRHOSIS',phenotype))
+colnames(litvibs)=c('feature','phenotype','association_direction')
+litvibs$`Reported in literature review`=TRUE
+
+print('Generating plots')
+outplots=list()
+files=metaph %>% select(filename) %>% unique() %>% unlist() %>% unname()
+  for(f in files){
+    all_multi_good_summary_stats=metaph %>% filter(filename==f)
+    all_multi_good_summary_stats=left_join(all_multi_good_summary_stats,litvibs)
+    all_multi_good_summary_stats$`Reported in literature review`[is.na(all_multi_good_summary_stats$`Reported in literature review`)]=FALSE
+    name=paste(strsplit(f,'.rds')[1][1],'_plot.pdf',sep='')
+    outplots[[paste(f)]]=ggplot(all_multi_good_summary_stats, aes(x = estimate, y = -log10(p.value), label = feature)) + geom_point(size=.5,aes(color=`Reported in literature review`)) +theme_cowplot(12)+ geom_hline(yintercept = -log10(.05))+ xlim(-3, 3) +ylim(0,15)+ theme(legend.position = "none") +theme(axis.title.y=element_blank(),axis.title.x=element_blank())+ggtitle(toupper(gsub('_90.rds','',f)))
+ggplot(all_multi_good_summary_stats, aes(x = estimate, y = -log10(p.value), label = feature)) + geom_point(size=.5,aes(color=`Reported in literature review`)) +theme_cowplot(12)+ geom_hline(yintercept = -log10(.05))+ xlim(-3, 3) +ylim(0,15) +theme(axis.title.y=element_blank(),axis.title.x=element_blank())+ggtitle(toupper(gsub('_90.rds','',f)))
+ggsave(name,height=3,width=3,units = 'in',dpi = 300)
+}
+
+#format output plots for features
+plot_grid(plotlist = outplots,ncol=3,rows=2, align = 'v')
+ggsave('~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/all_volcanos.pdf')
+
+```
+
+
+```{r}
+#load in lit review data and get some examples
+setwd('~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/')
+
+litvibs=readRDS('lit_review_bugs_of_interest.rds') %>% select(-feature) %>% mutate(phenotype=if_else(phenotype=='CIRR','CIRRHOSIS',phenotype))
+colnames(litvibs)[1]='dependent_feature'
+litvibs = litvibs %>% mutate(Direction.of.association=if_else(Direction.of.association=='POSITIVE',1,if_else(Direction.of.association=='NEGATIVE',-1,0),0))
+
+total_tested_lit = litvibs %>% select(phenotype) %>% table %>% as.data.frame
+
+voe_sum_lit =  right_join(voesummaryoutput,litvibs) %>% mutate(present_in_literature=1,have_janus_effect  = if_else(is.na(janus_effect) | janus_effect>0.01 & janus_effect<0.99, 1,0),no_janus_effect  = if_else(!is.na(janus_effect) & janus_effect<0.01 | !is.na(janus_effect)  & janus_effect>0.99, 1,0))
+#voe_sum_lit$noje=(unname(voe_sum_lit$noje))
+voe_sum_lit =  right_join(metaph,voe_sum_lit,by=c('phenotype','feature'='dependent_feature')) %>% mutate(sig_in_analysis = ifelse(is.na(adj) | adj>0.05, 0, 1)) 
+
+voe_sum_lit_je_sum = voe_sum_lit %>% filter(janus_effect>0.01,janus_effect<0.99) %>% select(phenotype) %>% table %>% as.data.frame
+colnames(voe_sum_lit_je_sum)=c('Phenotype','Reported in literature + strong JE')
+  
+voe_lit = right_join(voe,litvibs)
+metaph_lit =  right_join(metaph,litvibs,by=c('phenotype','feature'='dependent_feature')) %>% filter(!is.na(adj))
+
+write.csv(voe_lit %>% select(-full_fits),'vibration_of_effects_output.csv')
+
+###count significant and matching features
+metaph_lit = metaph_lit %>% mutate(significant_in_our_analysis=if_else(adj<0.05,'YES','NO'),association_direction_from_this_analysis=if_else(estimate>0,1,-1))
+metaph_lit$association_direction_from_this_analysis[metaph_lit$Direction.of.association==0]=0
+
+metaph_lit = metaph_lit %>% mutate(association_directions_match=if_else(association_direction_from_this_analysis == Direction.of.association,'YES','NO'))
+metaph_lit$association_directions_match[metaph_lit$Direction.of.association==0]='INDETERMINANT'
+
+write.csv(metaph_lit,'~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/lit_review_bugs_of_interest.csv')
+
+voe_sum_lit_for_output = left_join(metaph_lit,voe_sum_lit) %>% filter(!is.na(adj))
+write.csv(voe_sum_lit_for_output,'voe_summary.csv')
+
+voe_sum_lit2 =left_join(metaph_lit,voe_sum_lit)  %>% filter(!is.na(adj)) %>% select(present_in_literature,sig_in_analysis,no_janus_effect,association_directions_match) 
+voe_sum_lit2 = voe_sum_lit2 %>% rename(overall_association_directions_match = association_directions_match)
+voe_sum_lit2$overall_association_directions_match[voe_sum_lit2$overall_association_directions_match=='YES']=1
+voe_sum_lit2$overall_association_directions_match[voe_sum_lit2$overall_association_directions_match=='NO']=0
+voe_sum_lit2$overall_association_directions_match[voe_sum_lit2$overall_association_directions_match=='INDETERMINANT']=1
+voe_sum_lit2[] <- sapply(voe_sum_lit2, as.numeric)
+pdf(paste('upset_full.pdf',sep=''),width=5,height=4)
+upset(as.data.frame(voe_sum_lit2))
+dev.off()
+
+for(p in unique(voe_sum_lit$phenotype)){
+  voe_sum_lit3 = left_join(metaph_lit,voe_sum_lit)  %>% filter(phenotype==p,!is.na(adj)) %>% select(present_in_literature,sig_in_analysis,no_janus_effect,association_directions_match) 
+voe_sum_lit3 = voe_sum_lit3 %>% rename(overall_association_directions_match = association_directions_match)
+voe_sum_lit3$overall_association_directions_match[voe_sum_lit3$overall_association_directions_match=='YES']=1
+voe_sum_lit3$overall_association_directions_match[voe_sum_lit3$overall_association_directions_match=='NO']=0
+voe_sum_lit3$overall_association_directions_match[voe_sum_lit3$overall_association_directions_match=='INDETERMINANT']=1
+  voe_sum_lit3[] <- sapply(voe_sum_lit3, as.numeric)
+  pdf(paste('upset_',p,'.pdf',sep=''),width=5,height=4)
+  print(upset(as.data.frame(voe_sum_lit3)))
+  dev.off()
+}
+
+
+metaph_lit = metaph_lit %>% filter(adj<0.05)
+
+metaph_lit=metaph_lit %>% filter(association_direction_from_this_analysis == Direction.of.association)
+
+total_tested_metaph_lit = metaph_lit %>% filter(!is.na(adj),adj<0.05,Direction.of.association==association_direction_from_this_analysis) %>% select(phenotype,adj,feature)
+total_tested_metaph_lit_counts = total_tested_metaph_lit%>% select(phenotype) %>% table %>% as.data.frame
+
+
+our_analysis_strong_je_and_in_lit = inner_join(total_tested_metaph_lit,voe_sum_lit %>% filter(janus_effect>0.01,janus_effect<0.99),by=c('phenotype','feature')) %>% select(phenotype) %>% table %>% as.data.frame()
+colnames(our_analysis_strong_je_and_in_lit) = c('Phenotype','Literature + FDR < 0.05 in initial analysis + strong JE')
+
+comparison = full_join(total_tested_lit,total_tested_metaph_lit_counts,by='.')
+colnames(comparison) = c('Phenotype','Reported in literature','FDR < 0.05 in initial analysis')
+comparison=full_join(comparison,voe_sum_lit_je_sum)
+comparison=full_join(comparison,our_analysis_strong_je_and_in_lit)
+
+comparison$Phenotype=fct_reorder(comparison$Phenotype,(desc(comparison['Reported in literature + strong JE'])))
+comparison = comparison %>%  melt
+comparison$variable=factor(comparison$variable,levels=c('Reported in literature','Reported in literature + strong JE', 'FDR < 0.05 in initial analysis', 'Literature + FDR < 0.05 in initial analysis + strong JE'))
+
+ggplot(comparison,aes(x=Phenotype,y=value,fill=variable)) + geom_bar(stat='identity',position='dodge') + coord_flip() + scale_fill_manual(values=RColorBrewer::brewer.pal(name='Set1',n=5))
+ggsave('comparison_between_us_and_lit.pdf',width=9,height=8)
+
+dipdata=list()
+for(p in unique(voe_sum_lit$phenotype)){
+  dipdata[[p]]=diptest::dip(voe_sum_lit %>% filter(!is.na(janus_effect),phenotype==p) %>% select(janus_effect) %>% unlist %>% unname)
+}
+
+dipdata = bind_cols(dipdata) %>% t() %>% as.data.frame %>% rownames_to_column('phenotype')
+colnames(dipdata)[2]='Dip statistic'
+dipdata$phenotype=fct_reorder(dipdata$phenotype,dipdata$`Dip statistic`)
+
+ggplot(data=dipdata,aes(x=`Dip statistic`,y=phenotype))+ geom_point()
+ggsave('dip_statistic_plot.pdf',width=3,height=8)
+
+voe_sum_lit_sub=voe_sum_lit %>% filter(janus_effect > .2, janus_effect<.8) %>% select(phenotype,feature,janus_effect)
+voe_sum_lit_sub_good=voe_sum_lit %>% filter(janus_effect < .01 | janus_effect > .99) %>% select(phenotype,feature,janus_effect) %>% arrange(janus_effect) %>% head
+
+evoe_sum_lit_sub = bind_rows(voe_sum_lit_sub,voe_sum_lit_sub_good)
+
+for(val in unique(voe_sum_lit$phenotype)){
+  ggplot(voe_sum_lit %>% filter(phenotype==val), aes(x = janus_effect)) +geom_histogram(bins=20)+ggtitle(val)  + theme(strip.background = element_blank(), strip.text.x = element_blank()) 
+  ggsave(paste(val,'_','janus_distribution_plot.pdf',sep=''),width=3,height=3)
+}
+
+phenotypes=unique(voe_sum_lit_sub$phenotype)
+
+for(p in phenotypes){
+  phenotype_features = voe_sum_lit_sub %>% filter(phenotype==p) %>% select(feature) %>% unlist %>% unname
+  for(f in phenotype_features){
+    #ma_output = metaph %>% filter(feature==f,phenotype==p) %>% select(estimate,adj)
+    voe_data = voe_lit %>% filter(dependent_feature==f, phenotype==p) %>% select(estimate,p.value,dependent_feature,phenotype)
+    sumdata = voe_sum_lit_sub %>% filter(feature==f,phenotype==p)
+  #  x=ma_output$estimate
+   # y=ma_output$adj
+    p2=ggplot(data = voe_data, aes(x = estimate, y = -log10(p.value))) + geom_point(alpha=.5)  +theme(legend.position="bottom") +theme(legend.title = element_blank()) + xlab('Estimate')  + ggtitle(paste(p,f))+ theme(legend.text=element_text(size=6))+ theme(plot.title = element_text(size=12)) + geom_hline(yintercept = -log10(0.05))+ xlim(-3,3) +ylim(0,3)# + geom_point(aes(x=x, y=-log10(y)),shape=23, fill="blue", color="darkred", size=3)#+ geom_hline(yintercept = -log10(fdr_sig),linetype='dashed')
+    ggsave(paste('voe_output_lit/',paste(p,f,sep='_'),'.pdf',sep=''),width=8,height=8)
+  }
+}
+```
+
+```{r}
+#prausnitzii analysis
+setwd('~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/')
+
+
+voe_lit_fp = voe_lit %>% filter(dependent_feature=='k__Bacteria|p__Firmicutes|c__Clostridia|o__Clostridiales|f__Ruminococcaceae|g__Faecalibacterium|s__Faecalibacterium_prausnitzii')
+
+for(p in unique(voe_lit_fp$phenotype)){
+  phenotype_features = 'k__Bacteria|p__Firmicutes|c__Clostridia|o__Clostridiales|f__Ruminococcaceae|g__Faecalibacterium|s__Faecalibacterium_prausnitzii'
+  for(f in phenotype_features){
+    #ma_output = metaph %>% filter(feature==f,phenotype==p) %>% select(estimate,adj)
+    voe_data = voe_lit_fp %>% filter(dependent_feature==f, phenotype==p) %>% select(estimate,p.value,dependent_feature,phenotype)
+    sumdata = voe_sum_lit_sub %>% filter(feature==f,phenotype==p)
+  #  x=ma_output$estimate
+   # y=ma_output$adj
+    p2=ggplot(data = voe_data, aes(x = estimate, y = -log10(p.value))) + geom_point(alpha=.5)  +theme(legend.position="bottom") +theme(legend.title = element_blank()) + xlab('Estimate') + theme(legend.text=element_text(size=6))+ theme(plot.title = element_text(size=12)) + geom_hline(yintercept = -log10(0.05))+ xlim(-3,3) +ylim(0,5)# + geom_point(aes(x=x, y=-log10(y)),shape=23, fill="blue", color="darkred", size=3)#+ geom_hline(yintercept = -log10(fdr_sig),linetype='dashed')
+    ggsave(paste('voe_output_lit_fp/',paste(p,f,sep='_'),'.pdf',sep=''),width=5,height=5)
+  }
+}
+
+```
+
+
+```{r}
+#plot lit review summary data
+
+#bolden function from https://stackoverflow.com/questions/39694490/highlighting-individual-axis-labels-in-bold-using-ggplot2
+
+bolden <- function(src, boulder) {
+  if (!is.factor(src)) src <- factor(src)                   # make sure it's a factor
+  src_levels <- levels(src)                                 # retrieve the levels in their order
+  brave <- boulder %in% src_levels                          # make sure everything we want to make bold is actually in the factor levels
+  if (all(brave)) {                                         # if so
+    b_pos <- purrr::map_int(boulder, ~which(.==src_levels)) # then find out where they are
+    b_vec <- rep("plain", length(src_levels))               # make'm all plain first
+    b_vec[b_pos] <- "bold"                                  # make our targets bold
+    b_vec                                                   # return the new vector
+  } else {
+    stop("All elements of 'boulder' must be in src")
+  }
+}
+
+plot_lit_rev_sum_fig <- function(for_heatmap_full,ptype,h1,h2,h3,names){
+  for_heatmap=for_heatmap_full %>% filter(phenotype==ptype) %>% ungroup() %>%  arrange(significant_in_initial_association,janus_effect,fraction_pvalue_significant)
+  
+  for_heatmap$microbe_name = factor(for_heatmap$microbe_name)
+  for_heatmap$microbe_name=fct_reorder(for_heatmap$microbe_name,seq(for_heatmap$microbe_name))
+  
+  df1=for_heatmap %>% select(microbe_name,significant_in_initial_association) %>%melt()
+  df2=for_heatmap%>% select(microbe_name,janus_effect,significant_in_initial_association,number_of_models) %>%melt(c("microbe_name","significant_in_initial_association","number_of_models"))
+  df2$rowname=paste(df2$microbe_name,' (N=',df2$number_of_models,')',sep='')
+  df2$rowname=fct_reorder(df2$rowname,seq(df2$microbe_name))
+  df3=for_heatmap %>% select(microbe_name,fraction_pvalue_significant,fraction_fdr_significant,number_of_models) %>%melt(c("microbe_name","number_of_models"))
+  
+  if(names==FALSE){
+  
+      p1=ggplot(df1,aes(x=variable, y=microbe_name,fill=as.factor(value))) + geom_tile(color = "black")+ theme(axis.text.y = element_blank(),strip.background = element_blank(),axis.title.y = element_blank(),axis.title.x = element_blank(),strip.text.x = element_blank(),axis.text.x = element_blank()) + scale_fill_manual(values=c('white','red'))+theme(legend.position="none",legend.title = element_blank())+scale_x_discrete(expand=c(0,0))+scale_y_discrete(expand=c(0,0))+coord_flip()
+
+        p2=ggplot(df2,aes(x=variable, y=rowname,fill=value)) + geom_tile(color = "black")+ theme(axis.text.y = element_blank(),strip.background = element_blank(),axis.title.x = element_blank(),axis.title.y = element_blank(),strip.text.x = element_blank(),axis.text.x = element_blank()) +theme(legend.position="none",legend.title = element_blank())+scale_x_discrete(expand=c(0,0))+scale_y_discrete(expand=c(0,0))+scale_fill_gradient2(midpoint = .5,low = "#66C2A5", mid = "#FC8D62",high="#66C2A5")+coord_flip()+ theme(legend.key.width=unit(2.2,"cm"))
+
+  p3=ggplot(df3,aes(y=value,x=microbe_name,fill=variable,colour=NA))+geom_bar(color=NA,stat='identity',position=position_dodge())+ theme(axis.text.y = element_text(size=9),strip.background = element_blank(),axis.title.x = element_blank(),axis.title.y = element_blank(),strip.text.x = element_blank(),axis.text.x = element_blank()) +theme(legend.position="none",legend.title = element_blank())+scale_fill_manual(values=c("grey","black"))+ylim(0,1)+ggtitle(ptype)+theme(plot.title = element_text(size=30))
+
+      lp1 <- get_legend(ggplot(for_heatmap %>% select(microbe_name,significant_in_initial_association) %>%melt(),aes(x=variable, y=microbe_name,fill=as.factor(value))) + geom_tile(color = "black")+ theme(axis.text.y = element_blank(),strip.background = element_blank(),axis.title.y = element_blank(),axis.title.x = element_blank(),strip.text.x = element_blank(),axis.text.x = element_text(size=9,angle=90)) + scale_fill_manual(values=c('white','grey'))+theme(legend.position="top",legend.title = element_blank())+scale_x_discrete(expand=c(0,0))+scale_y_discrete(expand=c(0,0))+coord_flip())
+
+    
+  as_ggplot(lp1)
+  ggsave('legend_ma_sig.pdf')
+  
+  
+  pdf(paste(ptype,'_',names,'_litrev_analysis.pdf',sep=''),width=16)
+  print(plot_grid(p3, p2, p1, align = "v", nrow = 3, rel_heights = c(h1, h2, h3)))
+  dev.off()
+  
+  }
+  if(names==TRUE){
+        p2=ggplot(df2,aes(x=variable, y=rowname,fill=value)) + geom_tile(color = "black")+ theme(axis.text.y = element_blank(),strip.background = element_blank(),axis.title.x = element_blank(),axis.title.y = element_blank(),strip.text.x = element_blank(),axis.text.x = element_text(face=bolden(df2$microbe_name,df2 %>% filter(significant_in_initial_association == 1) %>% select(microbe_name) %>% unname %>% unlist %>% as.character()),size=9,angle=60,hjust=.95,vjust=.98)) +theme(legend.position="none",legend.title = element_blank())+scale_x_discrete(expand=c(0,0))+scale_y_discrete(expand=c(0,0))+scale_fill_gradient2(midpoint = .5,low = "#66C2A5", mid = "#FC8D62",high="#66C2A5")+coord_flip()+ theme(legend.key.width=unit(2.2,"cm"))
+
+  p3=ggplot(df3,aes(y=value,x=microbe_name,fill=variable,colour=NA))+geom_bar(color=NA,stat='identity',position=position_dodge())+ theme(axis.text.y = element_text(size=9),strip.background = element_blank(),axis.title.x = element_blank(),axis.title.y = element_blank(),strip.text.x = element_blank(),axis.text.x = element_blank()) +theme(legend.position="none",legend.title = element_blank())+scale_fill_manual(values=c("grey","black"))+ylim(0,1)+ggtitle(ptype)+theme(plot.title = element_text(size=12))
+
+  
+
+  pdf(paste(ptype,'_',names,'_litrev_analysis.pdf',sep=''),width=16)
+  print(plot_grid(p3,p2, align = "v", nrow = 2, rel_heights = c(h1, h2)))
+  dev.off()
+  }
+
+  
+    lp2 <- get_legend(ggplot(df2,aes(x=variable, y=microbe_name,fill=value)) + geom_tile(color = "black")+ theme(axis.text.y = element_blank(),strip.background = element_blank(),axis.title.x = element_blank(),axis.title.y = element_blank(),strip.text.x = element_blank(),axis.text.x = element_blank()) +theme(legend.position="bottom",legend.title = element_blank())+scale_x_discrete(expand=c(0,0))+scale_y_discrete(expand=c(0,0))+scale_fill_gradient2(midpoint = .5,low = "#66C2A5", mid = "#FC8D62",high="#66C2A5"))
+  lp3 <- get_legend(ggplot(df3,aes(y=value,x=microbe_name,fill=variable))+geom_bar(color='black',stat='identity',position=position_dodge())+ theme(axis.text.y = element_text(size=5,hjust=0.95,vjust=0.2),strip.background = element_blank(),axis.title.x = element_blank(),axis.title.y = element_blank(),strip.text.x = element_blank(),axis.text.x = element_blank()) +theme(legend.position="bottom",legend.title = element_blank())+scale_fill_manual(values=c("grey","black")))
+  
+  as_ggplot(lp2)
+  ggsave('legend_fp.pdf')
+  
+  as_ggplot(lp3)
+  ggsave('legend_barplot.pdf')
+}
+
+setwd('~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/lit_review_barplots')
+
+
+all_association_data=left_join(voe_lit,metaph_lit%>% filter(!is.na(adj)) %>% select(-p.value,-estimate),by=c('phenotype','dependent_feature'='feature'))
+all_association_data=left_join(all_association_data,voe_sum_lit %>% select(-p.value,-estimate,-BY,CI_95_lower,-CI_95_upper,-adj),by=c('phenotype','dependent_feature'='feature')) %>% mutate(significant_in_initial_association = if_else(adj<0.05,1,0)) 
+
+all_association_data=all_association_data %>% group_by(phenotype)  %>% mutate(min_pval = min(p.value,na.rm=TRUE), p_val_significant_once=if_else(min_pval<=.05,1,0),fdr_significant_once=if_else(min_pval<=fdr_sig,1,0))
+number_pvalue_significant=all_association_data  %>% group_by(phenotype,dependent_feature) %>% filter(p.value<=.05) %>% tally()
+colnames(number_pvalue_significant)[3]='number_pvalue_significant'
+number_fdr_significant=all_association_data  %>% group_by(phenotype,dependent_feature) %>% filter(p.value<=fdr_sig) %>% tally()
+colnames(number_fdr_significant)[3]='number_fdr_significant'
+
+all_association_data = all_association_data %>% select(dependent_feature,phenotype,significant_in_initial_association,janus_effect, number_of_models) %>% distinct()
+all_association_data=left_join(all_association_data,number_pvalue_significant,by=c('phenotype','dependent_feature'))
+all_association_data=left_join(all_association_data,number_fdr_significant,by=c('phenotype','dependent_feature')) %>% mutate(fraction_pvalue_significant = number_pvalue_significant/number_of_models, fraction_fdr_significant = number_fdr_significant/number_of_models,microbe_name = gsub('_',' ',gsub("^.*__", "", dependent_feature))) %>% filter(number_of_models != 0) 
+all_association_data[is.na(all_association_data)]=0
+
+all_association_data_subset = all_association_data %>% select(microbe_name,phenotype,significant_in_initial_association,janus_effect,fraction_pvalue_significant,fraction_fdr_significant, number_of_models) %>% distinct()
+
+plot_lit_rev_sum_fig(all_association_data_subset,'CIRRHOSIS',1,.1,.1,FALSE)
+plot_lit_rev_sum_fig(all_association_data_subset,'ACVD',1,.1,.1,FALSE)
+plot_lit_rev_sum_fig(all_association_data_subset,'IBD',1,.1,.1,FALSE)
+plot_lit_rev_sum_fig(all_association_data_subset,'CRC',1,.1,.1,FALSE)
+plot_lit_rev_sum_fig(all_association_data_subset,'T2D',1,.1,.1,FALSE)
+plot_lit_rev_sum_fig(all_association_data_subset,'T1D',1,.1,.1,FALSE)
+
+plot_lit_rev_sum_fig(all_association_data_subset,'CIRRHOSIS', 1,1,.1,TRUE)
+plot_lit_rev_sum_fig(all_association_data_subset,'ACVD',1,1,.1,TRUE)
+plot_lit_rev_sum_fig(all_association_data_subset,'IBD',1,1,.1,TRUE)
+plot_lit_rev_sum_fig(all_association_data_subset,'CRC',1,1,.1,TRUE)
+plot_lit_rev_sum_fig(all_association_data_subset,'T2D',1,1,.1,TRUE)
+plot_lit_rev_sum_fig(all_association_data_subset,'T1D',1,1,.1,TRUE)
+
+```
+
+```{r}
+#confounding analysis
+setwd('~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/')
+
+#load all data
+counts <- list()
+files=list.files()
+files=c('ACVD_90.rds','CRC_90.rds','cirrhosis_90.rds','T1D_90.rds','T2D_90.rds','IBD_90.rds')
+
+confoundinganalysis=list()
+for(file in files){
+  f=readRDS(file)
+  confoundinganalysis[[file]]=f$vibration_output[['confounder_analysis']] %>% mutate(phenotype=gsub('_90.rds','',file))
+}
+
+setwd('~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/confounder_analysis/')
+
+confoundinganalysis=bind_rows(confoundinganalysis)
+
+phenotypes=c('ACVD','CRC','cirrhosis','T1D','T2D','IBD')
+
+estimates=list()
+for(p in phenotypes){
+  e = confoundinganalysis %>% filter(phenotype==p)
+  estimates[[p]]=e %>% select(term,estimate,std.error,sdmin,sdmax) %>% drop_na() %>% mutate(phenotype=p) %>% filter(term!='(Intercept)' & term!='statistic' & term!='X' & term!='std.error' )
+}
+
+estimates=bind_rows(estimates)
+
+estimates_conserved = estimates %>% group_by(term) %>% mutate(count=n()) %>% ungroup %>% filter(count>1) %>% select(-count) %>% filter(phenotype!='IGI') %>% group_by(term) %>% mutate(mean=mean(estimate)) %>% arrange(desc(mean))
+
+estimates_conserved$term=fct_reorder(estimates_conserved$term,seq(nrow(estimates_conserved)))
+
+ggplot(estimates_conserved,aes(x=reorder(term,mean),y=estimate,fill=phenotype)) +geom_bar(stat='identity',position='dodge') + xlab('') + ylab('Change in model effect size')+ggtitle('Conserved adjusters')+geom_errorbar(aes(ymin =sdmin,ymax=sdmax), width = 0.2, position = position_dodge(width = 0.9))+ theme(legend.position = 'bottom',plot.title = element_text(size=12))+theme(axis.text = element_text(size=10,angle=30,hjust=1))
+ggsave('conserved_confounders.pdf',width=15,height=4.51)
+
+estimates_not_conserved = estimates %>% group_by(term) %>% mutate(count=n()) %>% ungroup  %>% select(-count) %>% filter(phenotype!='IGI') %>% group_by(term) %>% mutate(mean=mean(estimate)) %>% arrange(desc(mean))
+
+
+phenos = unique(estimates_not_conserved$phenotype)
+for(p in phenos){
+  estimates_not_conserved_2 = estimates_not_conserved %>% filter(phenotype==p) 
+  ggplot(estimates_not_conserved_2,aes(x=reorder(term,estimate),y=estimate)) +geom_bar(stat='identity',position='dodge') + xlab('') + ylab('Change in model effect size')+ggtitle(p)+geom_errorbar(aes(ymin =sdmin,ymax=sdmax), width = 0.2, position = position_dodge(width = 0.9))+ theme(legend.position = 'bottom',plot.title = element_text(size=12))+theme(axis.text = element_text(size=10,angle=50,hjust=1))
+  ggsave(paste('estimate_confounders_specific_short2',p,'.pdf',sep=''),width=2,height=3)
+}
+
+
+```
+
+```{r}
+#get examples colored by variable
+
+get_feature_volcanoplot_by_adjuster <- function(feature_vib_df,title,adjuster,fdr,x,y,max_y_val,max_x_val) {
+  plot <- ggplot(data = feature_vib_df, aes(x = estimate, y = -log10(p.value))) +geom_point(alpha=.5,aes(color = as.logical(.data[[adjuster]]))) +labs(color = adjuster)+geom_hline(yintercept = -log10(.05)) +theme(legend.position="bottom") + xlab('Estimate') +ggtitle(title)+ theme(plot.title = element_text(size=10))+xlim(-1*max_x_val,max_x_val) + ylim(0,max_y_val)
+  return(plot)
+}
+
+setwd('~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/')
+
+#load all data
+counts <- list()
+files=list.files()
+files=files[grep('90',files)]
+files=files[grep('rds',files)]
+voeoutput=list()
+voesummaryoutput=list()
+for(file in files){
+  ptype=toupper(gsub('_90.rds','',file))
+  if(ptype == 'T1D' | ptype == 'T2D' | ptype =='CIRR'){
+      system(paste('mkdir voe_colored_by_adjuster/',ptype,sep='')) 
+    f=readRDS(file)
+    voe_full=f$vibration_output
+    voe = voe_full$data %>% mutate(phenotype=toupper(ptype))
+    voe = right_join(voe,litvibs)
+    features=voe %>% select(dependent_feature) %>% unlist %>% unname %>% unique
+    adjusters=vibration_variables
+    for(feat in features){
+      ma_pval= metaph %>% filter(feature==feat & phenotype==ptype) %>% select(p.value) %>% unname %>% unlist
+      ma_estimate =  metaph  %>% filter(feature==feat & phenotype==ptype) %>% select(estimate) %>% unname %>% unlist
+        for(adj in adjusters){        
+          outputName=paste('voe_colored_by_adjuster/',ptype,'/',ptype,'_',feat,'_',adj,'.tiff',sep='')
+          adjusted_title=paste(feat,'adjusted by',adj)
+          voe_temp=voe %>% filter(dependent_feature==feat)
+          voe_temp=voe_temp[!is.na(voe_temp$p.value),]
+          if(nrow(voe_temp)>0){
+            max_y_val = unlist(unname(-log10(quantile(voe_temp %>% select(p.value) %>% unlist %>% unname,.01,na.rm=TRUE))))+.01*-log10(min(voe_temp %>% select(p.value)))
+            if(max_y_val<=-log10(0.05)){
+              max_y_val=2
+            }
+            max_x_val = max(abs(voe_temp %>%select(estimate) %>% range))+.001
+            outplot=get_feature_volcanoplot_by_adjuster(voe_temp,adjusted_title,adj,fdr_sig,ma_estimate,ma_pval,max_y_val,max_x_val)
+            ggsave(outputName,plot=outplot,height=6,width=6,units='in')
+          }
+        }
+      }
+   }
+}
+
+```
+
+```{r}
+#get examples colored by DATASET
+
+get_feature_volcanoplot_by_adjuster <- function(feature_vib_df,title,adjuster,fdr,x,y,max_y_val,max_x_val) {
+  plot <- ggplot(data = feature_vib_df, aes(x = estimate, y = -log10(p.value))) +geom_point(alpha=.5,aes(color = as.factor(.data[[adjuster]]))) +labs(color = adjuster)+geom_hline(yintercept = -log10(.05)) +theme(legend.position="bottom") + xlab('Estimate') +ggtitle(title)+ theme(plot.title = element_text(size=10))+xlim(-1*max_x_val,max_x_val) + ylim(0,max_y_val)
+  return(plot)
+}
+
+setwd('~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/')
+
+#load all data
+counts <- list()
+files=list.files()
+files=files[grep('90',files)]
+files=files[grep('rds',files)]
+voeoutput=list()
+voesummaryoutput=list()
+for(file in files){
+  ptype=toupper(gsub('_90.rds','',file))
+  if(ptype == 'T1D' | ptype == 'T2D'){
+      system(paste('mkdir voe_colored_by_adjuster/',ptype,sep='')) 
+    f=readRDS(file)
+    voe_full=f$vibration_output
+    voe = voe_full$data %>% mutate(phenotype=toupper(ptype))
+    voe = right_join(voe,litvibs)
+    features=voe %>% select(dependent_feature) %>% unlist %>% unname %>% unique
+    adjusters='dataset_id'#f$vibration_variables
+    for(feat in features){
+      ma_pval= metaph %>% filter(feature==feat & phenotype==ptype) %>% select(p.value) %>% unname %>% unlist
+      ma_estimate =  metaph  %>% filter(feature==feat & phenotype==ptype) %>% select(estimate) %>% unname %>% unlist
+        for(adj in adjusters){        
+          outputName=paste('voe_colored_by_adjuster/',ptype,'/',ptype,'_',feat,'_',adj,'.tiff',sep='')
+          adjusted_title=paste(feat,'adjusted by',adj)
+          voe_temp=voe %>% filter(dependent_feature==feat)
+          voe_temp=voe_temp[!is.na(voe_temp$p.value),]
+          if(nrow(voe_temp)>0){
+            max_y_val = unlist(unname(-log10(quantile(voe_temp %>% select(p.value) %>% unlist %>% unname,.01,na.rm=TRUE))))+.01*-log10(min(voe_temp %>% select(p.value)))
+            if(max_y_val<=-log10(0.05)){
+              max_y_val=2
+            }
+            max_x_val = max(abs(voe_temp %>%select(estimate) %>% range))+.001
+            outplot=get_feature_volcanoplot_by_adjuster(voe_temp,adjusted_title,adj,fdr_sig,ma_estimate,ma_pval,max_y_val,max_x_val)
+            ggsave(outputName,plot=outplot,height=6,width=6,units='in')
+          }
+        }
+      }
+   }
+}
+
+```
+
+```{r}
+#f prau adjusters
+
+get_feature_volcanoplot_by_adjuster <- function(feature_vib_df,title,adjuster,fdr,x,y) {
+  plot <- ggplot(data = feature_vib_df, aes(x = estimate, y = -log10(p.value))) +geom_point(alpha=.5,aes(color = as.logical(.data[[adjuster]]))) +labs(color = adjuster)+geom_hline(yintercept = -log10(.05)) +theme(legend.position="bottom") + xlab('Estimate') +ggtitle(title)+ theme(plot.title = element_text(size=10))+xlim(-3,3) + ylim(0,5)
+  return(plot)
+}
+
+setwd('~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/')
+
+#load all data
+counts <- list()
+files=list.files()
+files=files[grep('90',files)]
+files=files[grep('rds',files)]
+voeoutput=list()
+voesummaryoutput=list()
+for(file in files){
+  ptype=toupper(gsub('_90.rds','',file))
+  if(ptype == 'T1D' | ptype == 'T2D' | ptype  == 'CRC' | ptype == 'ACVD' | ptype == 'IBD' | ptype == 'CIRRHOSIS'){
+      system(paste('mkdir voe_colored_by_adjuster_fp/',ptype,sep='')) 
+    f=readRDS(file)
+    voe_full=f$vibration_output
+    voe = voe_full$data %>% mutate(phenotype=toupper(ptype))
+    voe = right_join(voe,litvibs)
+    adjusters=f$vibration_variables
+    features='k__Bacteria|p__Firmicutes|c__Clostridia|o__Clostridiales|f__Ruminococcaceae|g__Faecalibacterium|s__Faecalibacterium_prausnitzii'
+    for(feat in features){
+      ma_pval= metaph %>% filter(feature==feat & phenotype==ptype) %>% select(p.value) %>% unname %>% unlist
+      ma_estimate =  metaph  %>% filter(feature==feat & phenotype==ptype) %>% select(estimate) %>% unname %>% unlist
+        for(adj in adjusters){        
+          outputName=paste('voe_colored_by_adjuster_fp/',ptype,'/',ptype,'_',feat,'_',adj,'.pdf',sep='')
+          adjusted_title=paste(feat,'adjusted by',adj)
+          voe_temp=voe %>% filter(dependent_feature==feat)
+          voe_temp=voe_temp[!is.na(voe_temp$p.value),]
+          if(nrow(voe_temp)>0){
+            outplot=get_feature_volcanoplot_by_adjuster(voe_temp,adjusted_title,adj,fdr_sig,ma_estimate,ma_pval)
+            ggsave(outputName,plot=outplot,height=6,width=6,units='in')
+          }
+        }
+      }
+   }
+}
+
+
+
+
+```
+
+```{r}
+#get F PRAU examples colored by DATASET
+
+get_feature_volcanoplot_by_adjuster <- function(feature_vib_df,title,adjuster,fdr,x,y,max_y_val,max_x_val) {
+  plot <- ggplot(data = feature_vib_df, aes(x = estimate, y = -log10(p.value))) +geom_point(alpha=.5,aes(color = as.factor(.data[[adjuster]]))) +labs(color = adjuster)+geom_hline(yintercept = -log10(.05)) +theme(legend.position="bottom") + xlab('Estimate') +ggtitle(title)+ theme(plot.title = element_text(size=10))+xlim(-1*max_x_val,max_x_val) + ylim(0,max_y_val)
+  return(plot)
+}
+
+setwd('~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/')
+
+#load all data
+counts <- list()
+files=list.files()
+files=files[grep('90',files)]
+files=files[grep('rds',files)]
+voeoutput=list()
+voesummaryoutput=list()
+for(file in files){
+  ptype=toupper(gsub('_90.rds','',file))
+  if(ptype == 'T1D' | ptype == 'T2D' | ptype  == 'CRC' | ptype == 'ACVD' | ptype == 'IBD' | ptype == 'CIRRHOSIS'){
+    system(paste('mkdir voe_colored_by_adjuster_fp/',ptype,sep='')) 
+    f=readRDS(file)
+    voe_full=f$vibration_output
+    voe = voe_full$data %>% mutate(phenotype=toupper(ptype))
+    voe = right_join(voe,litvibs)
+    features='k__Bacteria|p__Firmicutes|c__Clostridia|o__Clostridiales|f__Ruminococcaceae|g__Faecalibacterium|s__Faecalibacterium_prausnitzii'
+    adjusters='dataset_id'#f$vibration_variables
+    for(feat in features){
+      ma_pval= metaph %>% filter(feature==feat & phenotype==ptype) %>% select(p.value) %>% unname %>% unlist
+      ma_estimate =  metaph  %>% filter(feature==feat & phenotype==ptype) %>% select(estimate) %>% unname %>% unlist
+        for(adj in adjusters){        
+          outputName=paste('voe_colored_by_adjuster_fp/',ptype,'/',ptype,'_',feat,'_',adj,'.tiff',sep='')
+          adjusted_title=paste(feat,'adjusted by',adj)
+          voe_temp=voe %>% filter(dependent_feature==feat)
+          voe_temp=voe_temp[!is.na(voe_temp$p.value),]
+          if(nrow(voe_temp)>0){
+            max_y_val = unlist(unname(-log10(quantile(voe_temp %>% select(p.value) %>% unlist %>% unname,.01,na.rm=TRUE))))+.01*-log10(min(voe_temp %>% select(p.value)))
+            if(max_y_val<=-log10(0.05)){
+              max_y_val=2
+            }
+            max_x_val = max(abs(voe_temp %>%select(estimate) %>% range))+.001
+            outplot=get_feature_volcanoplot_by_adjuster(voe_temp,adjusted_title,adj,fdr_sig,ma_estimate,ma_pval,max_y_val,max_x_val)
+            ggsave(outputName,plot=outplot,height=6,width=6,units='in')
+        }
+        }
+    }
+   }
+}
+
+```
