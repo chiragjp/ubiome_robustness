@@ -17,11 +17,8 @@ library(ggnewscale)
 library(ggalluvial)
 library(phylobase)
 library(reshape2)
-library(phytools)
 library(broom)
-library(taxonomizr)
 library(ecodist)
-library(ggtree)
 library(readxl)
 library(pheatmap)
 library(rlang) 
@@ -247,6 +244,27 @@ for(p in unique(voe_lit_fp$phenotype)){
 
 ```
 
+```{r}
+#roseburia analysis
+setwd('~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/')
+
+
+voe_lit_acvd = voe_lit %>% filter(dependent_feature=="k__Bacteria|p__Firmicutes|c__Clostridia|o__Clostridiales|f__Lachnospiraceae|g__Roseburia", phenotype=='ACVD')
+
+for(p in unique(voe_lit_acvd$phenotype)){
+  phenotype_features = "k__Bacteria|p__Firmicutes|c__Clostridia|o__Clostridiales|f__Lachnospiraceae|g__Roseburia"
+  for(f in phenotype_features){
+    #ma_output = metaph %>% filter(feature==f,phenotype==p) %>% select(estimate,adj)
+    voe_data = voe_lit_acvd %>% filter(dependent_feature==f, phenotype==p) %>% select(estimate,p.value,dependent_feature,phenotype)
+    sumdata = voe_sum_lit_sub %>% filter(feature==f,phenotype==p)
+  #  x=ma_output$estimate
+   # y=ma_output$adj
+    p2=ggplot(data = voe_data, aes(x = estimate, y = -log10(p.value))) + geom_point(alpha=.5)  +theme(legend.position="bottom") +theme(legend.title = element_blank()) + xlab('Estimate') + theme(legend.text=element_text(size=6))+ theme(plot.title = element_text(size=12)) + geom_hline(yintercept = -log10(0.05))+ xlim(-3,3) +ylim(0,5)+ geom_hline(yintercept = -log10(fdr_sig),linetype='dashed')# + geom_point(aes(x=x, y=-log10(y)),shape=23, fill="blue", color="darkred", size=3)#
+    ggsave(paste('voe_output_lit_ros/',paste(p,f,sep='_'),'.pdf',sep=''),width=5,height=5)
+  }
+}
+
+```
 
 ```{r}
 #plot lit review summary data
@@ -341,6 +359,10 @@ all_association_data[is.na(all_association_data)]=0
 
 all_association_data_subset = all_association_data %>% select(microbe_name,phenotype,significant_in_initial_association,janus_effect,fraction_pvalue_significant,fraction_fdr_significant, number_of_models) %>% distinct()
 
+###NUMBER SIGNIFICANT POST ANALYSIS
+#plot 1 == number initially significant p val, number significant fdr, number reported in literature, direction the same
+#plot 2 == number significant p val after vib, number significant fdr after vib, number reported in literature, median direction the same
+
 plot_lit_rev_sum_fig(all_association_data_subset,'CIRRHOSIS',1,.1,.1,FALSE)
 plot_lit_rev_sum_fig(all_association_data_subset,'ACVD',1,.1,.1,FALSE)
 plot_lit_rev_sum_fig(all_association_data_subset,'IBD',1,.1,.1,FALSE)
@@ -354,6 +376,59 @@ plot_lit_rev_sum_fig(all_association_data_subset,'IBD',1,1,.1,TRUE)
 plot_lit_rev_sum_fig(all_association_data_subset,'CRC',1,1,.1,TRUE)
 plot_lit_rev_sum_fig(all_association_data_subset,'T2D',1,1,.1,TRUE)
 plot_lit_rev_sum_fig(all_association_data_subset,'T1D',1,1,.1,TRUE)
+
+```
+
+```{r}
+setwd('~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/lit_review_barplots')
+
+metaph_lit =  right_join(metaph,litvibs,by=c('phenotype','feature'='dependent_feature')) %>% filter(!is.na(adj))
+
+all_association_data=left_join(voe_lit,metaph_lit%>% filter(!is.na(adj)) %>% select(-p.value,-estimate),by=c('phenotype','dependent_feature'='feature'))
+all_association_data=left_join(all_association_data,voe_sum_lit,by=c('phenotype','dependent_feature'='feature')) 
+
+all_association_data=all_association_data %>% group_by(phenotype)  %>% mutate(min_pval = min(p.value.x,na.rm=TRUE), p_val_significant_once=if_else(min_pval<=.05,1,0),fdr_significant_once=if_else(min_pval<=fdr_sig,1,0))
+number_pvalue_significant=all_association_data  %>% group_by(phenotype,dependent_feature) %>% filter(p.value.x<=.05) %>% tally()
+colnames(number_pvalue_significant)[3]='number_pvalue_significant'
+number_fdr_significant=all_association_data  %>% group_by(phenotype,dependent_feature) %>% filter(p.value.x<=fdr_sig | adj.x<=0.05) %>% tally()
+colnames(number_fdr_significant)[3]='number_fdr_significant'
+
+all_association_data_subset = all_association_data %>% select(dependent_feature,phenotype,p.value.y,adj.y,estimate.y,`estimate_quantile_50%`,Direction.of.association.y,present_in_literature,number_of_models,janus_effect) %>% distinct()
+
+all_association_data_subset=left_join(all_association_data_subset,number_pvalue_significant,by=c('phenotype','dependent_feature'))
+all_association_data_subset=left_join(all_association_data_subset,number_fdr_significant,by=c('phenotype','dependent_feature')) 
+
+all_association_data_subset = all_association_data_subset %>% mutate(pval_sig_after_vib = if_else(number_pvalue_significant>0,1,0), fdr_sig_after_vib =if_else(number_fdr_significant>0,1,0),microbe_name = gsub('_',' ',gsub("^.*__", "", dependent_feature))) %>% filter(number_of_models != 0) 
+all_association_data_subset[is.na(all_association_data_subset)]=0
+
+all_association_data_subset = all_association_data_subset %>% mutate(pval_significant_in_initial_association = if_else(p.value.y<=0.05,1,0),fdr_significant_in_initial_association = if_else(adj.y<=0.05,1,0))
+
+all_association_data_subset = all_association_data_subset %>% mutate(initial_association_direction=if_else(estimate.y>0,1,-1))
+all_association_data_subset = all_association_data_subset %>% mutate(initial_association_direction=if_else(Direction.of.association.y==0,0,initial_association_direction))
+all_association_data_subset = all_association_data_subset %>% mutate(initial_association_directions_match=if_else(initial_association_direction == Direction.of.association.y,1,0))
+
+all_association_data_subset = all_association_data_subset %>% mutate(voe_association_direction=if_else(`estimate_quantile_50%`>0,1,-1))
+all_association_data_subset = all_association_data_subset %>% mutate(voe_association_direction=if_else(Direction.of.association.y==0,0,voe_association_direction))
+all_association_data_subset = all_association_data_subset %>% mutate(voe_association_directions_match=if_else(voe_association_direction == Direction.of.association.y,1,0))
+
+all_association_data_subset_forplots = all_association_data_subset %>% select(dependent_feature,phenotype,present_in_literature,initial_association_directions_match,pval_significant_in_initial_association,fdr_significant_in_initial_association,voe_association_directions_match,pval_sig_after_vib,fdr_sig_after_vib) %>% mutate(microbe_name = gsub('_',' ',gsub("^.*__", "", dependent_feature)))
+
+#all_association_data_subset_forplots[all_association_data_subset_forplots=='INDETERMINANT'] = 1
+#all_association_data_subset_forplots[all_association_data_subset_forplots=='YES'] = 1
+#all_association_data_subset_forplots$initial_association_directions_match = as.numeric(all_association_data_subset_forplots$initial_association_directions_match)
+#all_association_data_subset_forplots$voe_association_directions_match = as.numeric(all_association_data_subset_forplots$voe_association_directions_match)
+
+###NUMBER SIGNIFICANT POST ANALYSIS
+#plot 1 == number initially significant p val, number significant fdr, number reported in literature, direction the same
+preplot = all_association_data_subset_forplots%>% ungroup %>% select(present_in_literature,initial_association_directions_match,pval_significant_in_initial_association,fdr_significant_in_initial_association)
+pdf(paste('upset_pre_vibration.pdf',sep=''),width=5,height=4)
+upset(as.data.frame(preplot),keep.order = TRUE,sets = colnames(preplot))
+dev.off()
+#plot 2 == number significant p val after vib, number significant fdr after vib, number reported in literature, median direction the same
+postplot = all_association_data_subset_forplots %>% ungroup %>% select(present_in_literature,voe_association_directions_match,pval_sig_after_vib,fdr_sig_after_vib)
+pdf(paste('upset_post_vibration.pdf',sep=''),width=5,height=4)
+upset(as.data.frame(postplot),keep.order = TRUE,sets = colnames(postplot))
+dev.off()
 
 ```
 
@@ -404,6 +479,10 @@ for(p in phenos){
 }
 
 
+```
+
+```{r}
+###GET EXAMPLE
 ```
 
 ```{r}
