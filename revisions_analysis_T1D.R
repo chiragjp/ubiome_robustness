@@ -61,23 +61,23 @@ col6_meta_analysis = list(col6mdat1,col6mdat2)
 col9_meta_analysis = list(col9mdat1,col9mdat2)
 
 ### logged voe
-voe_df_3var_mdat1 = quantvoe::full_voe_pipeline(independent_variables = col3mdat1, dependent_variables = cohort1_abundances, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
-voe_df_3var_mdat2 = quantvoe::full_voe_pipeline(independent_variables = col3mdat2, dependent_variables = cohort2_abundances, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
-voe_df_3var_meta = quantvoe::full_voe_pipeline(independent_variables = col3_meta_analysis, dependent_variables = list(cohort1_abundances,cohort2_abundances), primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1, meta_analysis=TRUE)
+voe_df_3var_mdat1_logged = quantvoe::full_voe_pipeline(independent_variables = col3mdat1, dependent_variables = cohort1_abundances, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+voe_df_3var_mdat2_logged = quantvoe::full_voe_pipeline(independent_variables = col3mdat2, dependent_variables = cohort2_abundances, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+voe_df_3var_meta_logged = quantvoe::full_voe_pipeline(independent_variables = col3_meta_analysis, dependent_variables = list(cohort1_abundances,cohort2_abundances), primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1, meta_analysis=TRUE)
 
-saveRDS(list(voe_df_3var_mdat1_logged,voe_df_3var_mdat2_nogged,voe_df_3var_meta_logged),'logged_3var_voe_T1D.rds')
+saveRDS(list(voe_df_3var_mdat1_logged,voe_df_3var_mdat2_logged,voe_df_3var_meta_logged),'logged_3var_voe_T1D.rds')
 
-voe_df_6var_mdat1 = quantvoe::full_voe_pipeline(independent_variables = col6mdat1, dependent_variables = cohort1_abundances, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
-voe_df_6var_mdat2 = quantvoe::full_voe_pipeline(independent_variables = col6mdat2, dependent_variables = cohort2_abundances, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
-voe_df_6var_meta = quantvoe::full_voe_pipeline(independent_variables = col6_meta_analysis, dependent_variables = list(cohort1_abundances,cohort2_abundances), primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1, meta_analysis=TRUE)
+voe_df_6var_mdat1_logged = quantvoe::full_voe_pipeline(independent_variables = col6mdat1, dependent_variables = cohort1_abundances, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+voe_df_6var_mdat2_logged = quantvoe::full_voe_pipeline(independent_variables = col6mdat2, dependent_variables = cohort2_abundances, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+voe_df_6var_meta_logged = quantvoe::full_voe_pipeline(independent_variables = col6_meta_analysis, dependent_variables = list(cohort1_abundances,cohort2_abundances), primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1, meta_analysis=TRUE)
 
-saveRDS(list(voe_df_6var_mdat1_logged,voe_df_6var_mdat2_nogged,voe_df_6var_meta_logged),'logged_6var_voe_T1D.rds')
+saveRDS(list(voe_df_6var_mdat1_logged,voe_df_6var_mdat2_logged,voe_df_6var_meta_logged),'logged_6var_voe_T1D.rds')
 
-voe_df_9var_mdat1 = quantvoe::full_voe_pipeline(independent_variables = col9mdat1, dependent_variables = cohort1_abundances, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
-voe_df_9var_mdat2 = quantvoe::full_voe_pipeline(independent_variables = col9mdat2, dependent_variables = cohort2_abundances, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
-voe_df_9var_meta = quantvoe::full_voe_pipeline(independent_variables = col9_meta_analysis, dependent_variables = list(cohort1_abundances,cohort2_abundances), primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1, meta_analysis=TRUE)
+voe_df_9var_mdat1_logged = quantvoe::full_voe_pipeline(independent_variables = col9mdat1, dependent_variables = cohort1_abundances, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+voe_df_9var_mdat2_logged = quantvoe::full_voe_pipeline(independent_variables = col9mdat2, dependent_variables = cohort2_abundances, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+voe_df_9var_meta_logged = quantvoe::full_voe_pipeline(independent_variables = col9_meta_analysis, dependent_variables = list(cohort1_abundances,cohort2_abundances), primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1, meta_analysis=TRUE)
 
-saveRDS(list(voe_df_9var_mdat1_logged,voe_df_9var_mdat2_nogged,voe_df_9var_meta_logged),'logged_9var_voe_T1D.rds')
+saveRDS(list(voe_df_9var_mdat1_logged,voe_df_9var_mdat2_logged,voe_df_9var_meta_logged),'logged_9var_voe_T1D.rds')
 
 ### non-logged voe
 cohort1_abundances_nonlogged = voe_out$original_data$dependent_variables[[1]] %>% mutate_if(is.numeric,function(x) round(exp(x) - 0.0000000100,20))
