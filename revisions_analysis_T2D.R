@@ -19,6 +19,7 @@
 
 library(tidyverse)
 library(compositions)
+library(quantvoe)
 
 voe_out = readRDS('T2D_90.rds')
 
