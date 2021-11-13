@@ -102,7 +102,7 @@ col9mdat7 = cohort7_metadata %>% select(sampleID,study_condition,all_of(col9co7)
 
 # meta analysis datasets for each var number
 col3_meta_analysis = list(col3mdat1,col3mdat2,col3mdat3,col3mdat4,col3mdat5,col3mdat6,col3mdat7)
-col6_meta_analysis = list(col6mdat1,col6mdat2,col6mdat3,col6mdat4,col3mdat5,col3mdat6,col3mdat7)
+col6_meta_analysis = list(col6mdat1,col6mdat2,col6mdat3,col6mdat4,col6mdat5,col6mdat6,col6mdat7)
 col9_meta_analysis = list(col9mdat1,col9mdat2,col9mdat3,col9mdat4,col9mdat5,col9mdat6,col9mdat7)
 
 ### logged voe
