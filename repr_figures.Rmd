@@ -331,6 +331,7 @@ for(p in unique(voe_lit_fp$phenotype)){
 #roseburia analysis
 setwd('~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/')
 
+voe_lit = read.csv('vibration_of_effects_output.csv')
 
 voe_lit_acvd = voe_lit %>% filter(dependent_feature=="k__Bacteria|p__Firmicutes|c__Clostridia|o__Clostridiales|f__Lachnospiraceae|g__Roseburia", phenotype=='ACVD')
 
