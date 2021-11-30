@@ -17,6 +17,7 @@ library(ggnewscale)
 library(ggalluvial)
 library(phylobase)
 library(reshape2)
+library(ComplexUpset)
 library(broom)
 library(ecodist)
 library(readxl)
@@ -29,7 +30,7 @@ library(lme4)
 library(ggpubr)
 library(lmerTest)
 library(broom.mixed)
-
+library(MKmisc)
 
 theme_set(theme_cowplot())
 ``` 
@@ -45,6 +46,8 @@ files=files[grep('rds',files)]
 metaph=list()
 voeoutput=list()
 voesummaryoutput=list()
+
+files = c('CIRRHOSIS_90.rds','T2D_90.rds','T1D_90.rds','IBD_90.rds','ACVD_90.rds','CRC_90.rds')
 for(file in files){
   f=readRDS(file)
   if('meta_analyis_output' %in% names(f)){
@@ -84,6 +87,11 @@ litvibs=readRDS('lit_review_bugs_of_interest.rds') %>% select(-feature) %>% muta
 colnames(litvibs)=c('feature','phenotype','association_direction')
 litvibs$`Reported in literature review`=TRUE
 
+### CREATE RAW DATA LIST FOR FUTURE UPSET ANALYSIS
+upset_analysis_list = list(metaph,voesummaryoutput,voe,litvibs)
+saveRDS(upset_analysis_list,'upset_analysis_list_for_merged.rds')
+
+
 print('Generating plots')
 outplots=list()
 files=metaph %>% select(filename) %>% unique() %>% unlist() %>% unname()
@@ -92,15 +100,90 @@ files=metaph %>% select(filename) %>% unique() %>% unlist() %>% unname()
     all_multi_good_summary_stats=left_join(all_multi_good_summary_stats,litvibs)
     all_multi_good_summary_stats$`Reported in literature review`[is.na(all_multi_good_summary_stats$`Reported in literature review`)]=FALSE
     name=paste(strsplit(f,'.rds')[1][1],'_plot.pdf',sep='')
-    outplots[[paste(f)]]=ggplot(all_multi_good_summary_stats, aes(x = estimate, y = -log10(p.value), label = feature)) + geom_point(size=.5,aes(color=`Reported in literature review`)) +theme_cowplot(12)+ geom_hline(yintercept = -log10(.05))+ xlim(-3, 3) +ylim(0,15)+ theme(legend.position = "none") +theme(axis.title.y=element_blank(),axis.title.x=element_blank())+ggtitle(toupper(gsub('_90.rds','',f)))
+    outplots[[paste(f)]]=ggplot(all_multi_good_summary_stats, aes(x = estimate, y = -log10(adj), label = feature)) + geom_point(size=.5,aes(color=`Reported in literature review`)) +theme_cowplot(12)+ geom_hline(yintercept = -log10(.05))+ xlim(-3, 3) +ylim(0,15)+ theme(legend.position = "none") +theme(axis.title.y=element_blank(),axis.title.x=element_blank())+ggtitle(toupper(gsub('_90.rds','',f)))
 ggplot(all_multi_good_summary_stats, aes(x = estimate, y = -log10(p.value), label = feature)) + geom_point(size=.5,aes(color=`Reported in literature review`)) +theme_cowplot(12)+ geom_hline(yintercept = -log10(.05))+ xlim(-3, 3) +ylim(0,15) +theme(axis.title.y=element_blank(),axis.title.x=element_blank())+ggtitle(toupper(gsub('_90.rds','',f)))
 ggsave(name,height=3,width=3,units = 'in',dpi = 300)
 }
 
 #format output plots for features
 plot_grid(plotlist = outplots,ncol=3,rows=2, align = 'v')
-ggsave('~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/all_volcanos.pdf')
+ggsave('~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/all_volcanos.pdf',width = 18,height =10)
 
+```
+
+
+```{r}
+### merged upset analysis
+setwd('~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/')
+
+upset_analysis_list = readRDS('upset_analysis_list_for_merged.rds')
+
+initial_associations = upset_analysis_list[[1]]  %>% mutate(uid = paste(feature,phenotype,sep='_'),association_direction_from_this_analysis=if_else(estimate>0,1,-1))
+summarized_voe = upset_analysis_list[[2]]
+voe_all = upset_analysis_list[[3]]
+litvibs = upset_analysis_list[[4]]
+
+initial_associations_initialpval_sig = initial_associations %>% mutate(uid = paste(feature,phenotype,sep='_'),`P-value significant in initial model` = if_else(p.value<=0.05,1,0)) %>% select(uid,`P-value significant in initial model`)
+initial_associations_initialfdr_sig = initial_associations %>% mutate(uid = paste(feature,phenotype,sep='_'),`FDR significant in initial model and/or meta-analysis` = if_else(adj<=0.05,1,0)) %>% select(uid,`FDR significant in initial model and/or meta-analysis`)
+
+fdr_sig = initial_associations %>% filter(adj<=.05) %>% select(p.value) %>% max
+
+voepval = voe_all %>% mutate(uid = paste(dependent_feature,phenotype,sep='_'),`P-value significant at least once upon VoE` = if_else(p.value<=0.05,1,0)) %>% filter(p.value<=0.05) %>% select(uid,`P-value significant at least once upon VoE`) %>% unique
+voefdr = voe_all %>% mutate(uid = paste(dependent_feature,phenotype,sep='_'),`FDR significant at least once upon VoE` = if_else(p.value<=fdr_sig,1,0)) %>% filter(p.value<=fdr_sig) %>% select(uid,`FDR significant at least once upon VoE`) %>% unique
+
+litvibs = litvibs %>% mutate(uid = paste(feature,phenotype,sep='_'),association_direction = if_else(as.character(association_direction) == 'POSITIVE',"1",as.character(association_direction))) %>% mutate(association_direction = if_else(association_direction == 'NEGATIVE',"-1",as.character(association_direction))) %>% mutate(association_direction = as.numeric(association_direction))
+initial_associations_lit = left_join(initial_associations,litvibs)
+initial_associations_lit$association_direction[is.na(initial_associations_lit$association_direction)]=0
+
+initial_associations_lit = initial_associations_lit %>% mutate(`Initial association direction matches literature` = if_else(association_direction_from_this_analysis == association_direction & association_direction != 0,1,0),`Reported in literature review` = if_else(`Reported in literature review`==TRUE,1,0))
+
+summarized_voe_median = summarized_voe %>% mutate(uid = paste(dependent_feature,phenotype,sep='_'),median_association_direction = if_else(`estimate_quantile_50%`>0,1,-1)) %>% select(uid,median_association_direction)
+
+initial_associations_lit_voe = left_join(initial_associations_lit,summarized_voe_median) %>% mutate(`Median VoE association direction matches literature` = if_else(median_association_direction == association_direction & association_direction != 0,1,0))
+
+matching_associations = initial_associations_lit_voe %>% select(uid,`Initial association direction matches literature`,`Median VoE association direction matches literature`,`Reported in literature review`)
+
+merged_output = left_join(initial_associations_initialpval_sig,initial_associations_initialfdr_sig)
+merged_output = left_join(merged_output,voepval)
+merged_output = left_join(merged_output,voefdr)
+merged_output = left_join(merged_output,matching_associations)
+
+merged_output = merged_output[,order(ncol(merged_output):1)]
+
+merged_output[is.na(merged_output)] = 0
+
+merged_output_for_big_upset = merged_output%>% unique%>% select(-uid,-`Initial association direction matches literature`,-`Median VoE association direction matches literature`) %>% filter(rowSums(.)!=0) 
+
+
+pdf('upset_plot_all_diseases.pdf',width = 8,height = 10)
+upset(merged_output_for_big_upset,intersect = colnames(merged_output_for_big_upset),sort_sets=FALSE)
+dev.off()
+
+
+# get fraction of matching associations plot
+voe_all = voe_all %>% mutate(uid = paste(dependent_feature,phenotype,sep='_'))
+voe_all_lit_vibs = left_join(voe_all,litvibs)  %>% filter(`Reported in literature review` == TRUE)
+voe_all_lit_vibs = voe_all_lit_vibs %>% mutate(voe_est_dir = if_else(estimate>=0,1,-1))
+voe_all_lit_vibs = voe_all_lit_vibs %>% mutate(match = if_else(association_direction == voe_est_dir,1,0))
+voe_all_lit_vibs = voe_all_lit_vibs %>% filter(!is.na(association_direction))
+counts = voe_all_lit_vibs %>% select(uid, phenotype) %>% unique %>% select(phenotype) %>% table %>% data.frame
+colnames(counts) = c('phenotype','freq')
+
+voe_all_lit_vibs_frac = voe_all_lit_vibs %>% select(uid,phenotype,match) %>% group_by(uid,phenotype) %>% summarise(fraction_matching = sum(match!=0)/length(match))
+
+voe_all_lit_vibs_frac = left_join(voe_all_lit_vibs_frac,counts)
+voe_all_lit_vibs_frac$name = paste(voe_all_lit_vibs_frac$phenotype,' (N = ',voe_all_lit_vibs_frac$freq,')',sep= '' )
+
+ggplot(data=voe_all_lit_vibs_frac, aes(x=fraction_matching, group=phenotype, fill=phenotype)) +
+    geom_density(adjust=1.5) +
+    facet_wrap(~name,scales = 'free') +
+    theme(
+      legend.position="none",
+      panel.spacing = unit(0.1, "lines"),
+      axis.ticks.x=element_blank()
+    )
+
+ggsave('frequency_plot_matching.pdf',width = 8, height =8)
 ```
 
 
@@ -122,7 +205,7 @@ voe_sum_lit_je_sum = voe_sum_lit %>% filter(janus_effect>0.01,janus_effect<0.99)
 colnames(voe_sum_lit_je_sum)=c('Phenotype','Reported in literature + strong JE')
   
 voe_lit = right_join(voe,litvibs)
-metaph_lit =  right_join(metaph,litvibs,by=c('phenotype','feature'='dependent_feature')) %>% filter(!is.na(adj))
+metaph_lit =  full_join(metaph,litvibs,by=c('phenotype','feature'='dependent_feature')) %>% filter(!is.na(adj))
 
 write.csv(voe_lit %>% select(-full_fits),'vibration_of_effects_output.csv')
 
@@ -133,7 +216,7 @@ metaph_lit$association_direction_from_this_analysis[metaph_lit$Direction.of.asso
 metaph_lit = metaph_lit %>% mutate(association_directions_match=if_else(association_direction_from_this_analysis == Direction.of.association,'YES','NO'))
 metaph_lit$association_directions_match[metaph_lit$Direction.of.association==0]='INDETERMINANT'
 
-write.csv(metaph_lit,'~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/lit_review_bugs_of_interest.csv')
+#write.csv(metaph_lit,'~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/lit_review_bugs_of_interest.csv')
 
 voe_sum_lit_for_output = left_join(metaph_lit,voe_sum_lit) %>% filter(!is.na(adj))
 write.csv(voe_sum_lit_for_output,'voe_summary.csv')
@@ -216,7 +299,7 @@ for(p in phenotypes){
     sumdata = voe_sum_lit_sub %>% filter(feature==f,phenotype==p)
   #  x=ma_output$estimate
    # y=ma_output$adj
-    p2=ggplot(data = voe_data, aes(x = estimate, y = -log10(p.value))) + geom_point(alpha=.5)  +theme(legend.position="bottom") +theme(legend.title = element_blank()) + xlab('Estimate')  + ggtitle(paste(p,f))+ theme(legend.text=element_text(size=6))+ theme(plot.title = element_text(size=12)) + geom_hline(yintercept = -log10(0.05))+ xlim(-3,3) +ylim(0,3)# + geom_point(aes(x=x, y=-log10(y)),shape=23, fill="blue", color="darkred", size=3)#+ geom_hline(yintercept = -log10(fdr_sig),linetype='dashed')
+    p2=ggplot(data = voe_data, aes(x = estimate, y = log10(1/p.value))) + geom_point(alpha=.5)  +theme(legend.position="bottom") +theme(legend.title = element_blank()) + xlab('Estimate')  + ggtitle('')+ ylab('p.value') +  theme(legend.text=element_text(size=6))+ theme(plot.title = element_text(size=12)) + geom_hline(yintercept = -log10(0.05))+ xlim(-3,3) + ylim(0,4)# + scale_y_continuous(breaks = seq(0,4,by=1.25)) 
     ggsave(paste('voe_output_lit/',paste(p,f,sep='_'),'.pdf',sep=''),width=8,height=8)
   }
 }
@@ -382,9 +465,9 @@ plot_lit_rev_sum_fig(all_association_data_subset,'T1D',1,1,.1,TRUE)
 ```{r}
 setwd('~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/lit_review_barplots')
 
-metaph_lit =  right_join(metaph,litvibs,by=c('phenotype','feature'='dependent_feature')) %>% filter(!is.na(adj))
+metaph_lit =  full_join(metaph,litvibs,by=c('phenotype','feature'='dependent_feature')) %>% filter(!is.na(adj))
 
-all_association_data=left_join(voe_lit,metaph_lit%>% filter(!is.na(adj)) %>% select(-p.value,-estimate),by=c('phenotype','dependent_feature'='feature'))
+all_association_data=full_join(voe_lit,metaph_lit%>% filter(!is.na(adj)) %>% select(-p.value,-estimate),by=c('phenotype','dependent_feature'='feature'))
 all_association_data=left_join(all_association_data,voe_sum_lit,by=c('phenotype','dependent_feature'='feature')) 
 
 all_association_data=all_association_data %>% group_by(phenotype)  %>% mutate(min_pval = min(p.value.x,na.rm=TRUE), p_val_significant_once=if_else(min_pval<=.05,1,0),fdr_significant_once=if_else(min_pval<=fdr_sig,1,0))
@@ -429,6 +512,8 @@ postplot = all_association_data_subset_forplots %>% ungroup %>% select(present_i
 pdf(paste('upset_post_vibration.pdf',sep=''),width=5,height=4)
 upset(as.data.frame(postplot),keep.order = TRUE,sets = colnames(postplot))
 dev.off()
+
+### merge pre and postplot
 
 ```
 

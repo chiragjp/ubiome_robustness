@@ -15,7 +15,7 @@ library(ComplexUpset)
 ```
 
 ```{r}
-setwd('~/Dropbox (Mason Lab)/repr_revisions/')
+setwd('~/Dropbox (HMS)/RagGroup Team Folder/Braden Tierney/vibration_of_effects_microbiome/repr/revisions/')
 
 clr_3var = readRDS('clr_3var_voe.rds')
 clr_3var[[4]] = clr_3var[[4]][names(clr_3var[[4]])!='initial_association_output']
