@@ -131,6 +131,15 @@ fdr_sig = initial_associations %>% filter(adj<=.05) %>% select(p.value) %>% max
 voepval = voe_all %>% mutate(uid = paste(dependent_feature,phenotype,sep='_'),`P-value significant at least once upon VoE` = if_else(p.value<=0.05,1,0)) %>% filter(p.value<=0.05) %>% select(uid,`P-value significant at least once upon VoE`) %>% unique
 voefdr = voe_all %>% mutate(uid = paste(dependent_feature,phenotype,sep='_'),`FDR significant at least once upon VoE` = if_else(p.value<=fdr_sig,1,0)) %>% filter(p.value<=fdr_sig) %>% select(uid,`FDR significant at least once upon VoE`) %>% unique
 
+
+### brief interlude to get number of associations recovered as a function of if they came from studies in this study or not
+
+litvib2 = read.csv('revisions/litvibs_2.csv')%>% filter(Cohort.used.in.sensitivity.analysis!='') %>% mutate(uid =  paste(full_feature_name,phenotype,sep='_')) %>% select(uid,Cohort.used.in.sensitivity.analysis) 
+
+tempmerge = right_join(voefdr,litvib2) %>% mutate(`FDR significant at least once upon VoE` = if_else(is.na(`FDR significant at least once upon VoE`),0,1))
+
+tempmerge %>% select(-uid) %>% table
+
 litvibs = litvibs %>% mutate(uid = paste(feature,phenotype,sep='_'),association_direction = if_else(as.character(association_direction) == 'POSITIVE',"1",as.character(association_direction))) %>% mutate(association_direction = if_else(association_direction == 'NEGATIVE',"-1",as.character(association_direction))) %>% mutate(association_direction = as.numeric(association_direction))
 initial_associations_lit = left_join(initial_associations,litvibs)
 initial_associations_lit$association_direction[is.na(initial_associations_lit$association_direction)]=0
@@ -340,13 +349,17 @@ for(p in unique(voe_lit_acvd$phenotype)){
   for(f in phenotype_features){
     #ma_output = metaph %>% filter(feature==f,phenotype==p) %>% select(estimate,adj)
     voe_data = voe_lit_acvd %>% filter(dependent_feature==f, phenotype==p) %>% select(estimate,p.value,dependent_feature,phenotype)
-    sumdata = voe_sum_lit_sub %>% filter(feature==f,phenotype==p)
+   # sumdata = voe_sum_lit_sub %>% filter(feature==f,phenotype==p)
   #  x=ma_output$estimate
    # y=ma_output$adj
     p2=ggplot(data = voe_data, aes(x = estimate, y = -log10(p.value))) + geom_point(alpha=.5)  +theme(legend.position="bottom") +theme(legend.title = element_blank()) + xlab('Estimate') + theme(legend.text=element_text(size=6))+ theme(plot.title = element_text(size=12)) + geom_hline(yintercept = -log10(0.05))+ xlim(-3,3) +ylim(0,5)+ geom_hline(yintercept = -log10(fdr_sig),linetype='dashed')# + geom_point(aes(x=x, y=-log10(y)),shape=23, fill="blue", color="darkred", size=3)#
     ggsave(paste('voe_output_lit_ros/',paste(p,f,sep='_'),'.pdf',sep=''),width=5,height=5)
   }
 }
+
+voe_data_acvd_sig = voe_data %>% filter(p.value<fdr_sig) %>% mutate(significant=TRUE,num = nrow(.)) %>%  select(antibiotics_current_use,age,gender,triglycerides,ldl,cholesterol) %>% colSums %>% data.frame
+
+voe_data_acvd_nosig = voe_data %>% filter(p.value>fdr_sig) %>% mutate(significant=FALSE,num = nrow(.)) %>% select(antibiotics_current_use,age,gender, triglycerides, ldl, cholesterol) %>% colSums %>% data.frame
 
 ```
 
