@@ -8,7 +8,9 @@ Associating human gut microbes with disease is one prerequisite to determining c
 
 # Contact
 
-Braden Tierney
-btt4001 ~at~ med DOT cornell DOT edu
-Twitter
-@BradenTierney
+* Braden T Tierney
+* btt4001 ~at~ med DOT cornell DOT edu
+* Web: https://www.bradentierney.com/
+* Twitter: https://twitter.com/BradenTierney
+* LinkedIn: https://www.linkedin.com/in/bradentierney/
+* Scholar: https://scholar.google.com/citations?user=6oSRYqMAAAAJ&hl=en&authuser=1&oi=ao
