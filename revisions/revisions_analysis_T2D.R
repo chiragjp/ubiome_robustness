@@ -49,6 +49,13 @@ col9co1 = sample(columns_to_consider_cohort1,9)
 col9co2 = sample(columns_to_consider_cohort2,9)
 col9co3 = sample(columns_to_consider_cohort3,9)
 
+### ADDING ADDITION SAMPLING FOR COHORT WITH THE MOST VARIABLES PER R2's SECOND SET OF REQUESTS
+col12co1 = sample(columns_to_consider_cohort1,12)
+col15co1 = sample(columns_to_consider_cohort1,15)
+col18co1 = sample(columns_to_consider_cohort1,18)
+col21co1 = sample(columns_to_consider_cohort1,21)
+col24co1 = sample(columns_to_consider_cohort1,24)
+
 # 3 varables in total
 col3mdat1 = cohort1_metadata %>% select(sampleID,study_condition,all_of(col3co1))
 col3mdat2 = cohort2_metadata %>% select(sampleID,study_condition,all_of(col3co2))
@@ -63,6 +70,13 @@ col6mdat3 = cohort3_metadata %>% select(sampleID,study_condition,all_of(col6co3)
 col9mdat1 = cohort1_metadata %>% select(sampleID,study_condition,all_of(col9co1))
 col9mdat2 = cohort2_metadata %>% select(sampleID,study_condition,all_of(col9co2))
 col9mdat3 = cohort3_metadata %>% select(sampleID,study_condition,all_of(col9co3))
+
+### ADDING ADDITION SAMPLING FOR COHORT WITH THE MOST VARIABLES PER R2's SECOND SET OF REQUESTS
+col12mdat1 = cohort1_metadata %>% select(sampleID,study_condition,all_of(col12co1))
+col15mdat1 = cohort1_metadata %>% select(sampleID,study_condition,all_of(col15co1))
+col18mdat1 = cohort1_metadata %>% select(sampleID,study_condition,all_of(col18co1))
+col21mdat1 = cohort1_metadata %>% select(sampleID,study_condition,all_of(col21co1))
+col24mdat1 = cohort1_metadata %>% select(sampleID,study_condition,all_of(col24co1))
 
 # meta analysis datasets for each var number
 col3_meta_analysis = list(col3mdat1,col3mdat2,col3mdat3)
@@ -91,6 +105,15 @@ voe_df_9var_meta_logged = quantvoe::full_voe_pipeline(independent_variables = co
 
 saveRDS(list(voe_df_9var_mdat1_logged,voe_df_9var_mdat2_logged,voe_df_9var_mdat3_logged,voe_df_9var_meta_logged),'logged_9var_voe_T2D.rds')
 
+### ADDING ADDITION SAMPLING FOR COHORT WITH THE MOST VARIABLES PER R2's SECOND SET OF REQUESTS
+voe_df_12var_mdat1_logged = quantvoe::full_voe_pipeline(independent_variables = col12mdat1, dependent_variables = cohort1_abundances, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+voe_df_15var_mdat1_logged = quantvoe::full_voe_pipeline(independent_variables = col15mdat1, dependent_variables = cohort1_abundances, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+voe_df_18var_mdat1_logged = quantvoe::full_voe_pipeline(independent_variables = col18mdat1, dependent_variables = cohort1_abundances, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+voe_df_21var_mdat1_logged = quantvoe::full_voe_pipeline(independent_variables = col21mdat1, dependent_variables = cohort1_abundances, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+voe_df_24var_mdat1_logged = quantvoe::full_voe_pipeline(independent_variables = col24p;;;;mdat1, dependent_variables = cohort1_abundances, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+
+saveRDS(list(voe_df_12var_mdat1_logged,voe_df_15var_mdat1_logged,voe_df_18var_mdat1_logged,voe_df_21var_mdat1_logged,voe_df_24var_mdat1_logged),'logged_cohort1_12_to_24_var_voe_T2D.rds')
+
 ### non-logged voe
 cohort1_abundances_nonlogged = voe_out$original_data$dependent_variables[[1]] %>% mutate_if(is.numeric,function(x) round(exp(x) - 0.0000000100,20))
 cohort2_abundances_nonlogged = voe_out$original_data$dependent_variables[[2]] %>% mutate_if(is.numeric,function(x) round(exp(x) - 0.0000000100,20))
@@ -116,6 +139,15 @@ voe_df_9var_mdat3_nonlogged = quantvoe::full_voe_pipeline(independent_variables 
 voe_df_9var_meta_nonlogged = quantvoe::full_voe_pipeline(independent_variables = col9_meta_analysis, dependent_variables = list(cohort1_abundances_nonlogged,cohort2_abundances_nonlogged,cohort3_abundances_nonlogged), primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1, meta_analysis=TRUE)
 
 saveRDS(list(voe_df_9var_mdat1_nonlogged,voe_df_9var_mdat2_nonlogged,voe_df_9var_mdat3_nonlogged,voe_df_9var_meta_nonlogged),'nonlogged_9var_voe_T2D.rds')
+
+### ADDING ADDITION SAMPLING FOR COHORT WITH THE MOST VARIABLES PER R2's SECOND SET OF REQUESTS
+voe_df_12var_mdat1_nonlogged = quantvoe::full_voe_pipeline(independent_variables = col12mdat1, dependent_variables = cohort1_abundances_nonlogged, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+voe_df_15var_mdat1_nonlogged = quantvoe::full_voe_pipeline(independent_variables = col15mdat1, dependent_variables = cohort1_abundances_nonlogged, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+voe_df_18var_mdat1_nonlogged = quantvoe::full_voe_pipeline(independent_variables = col18mdat1, dependent_variables = cohort1_abundances_nonlogged, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+voe_df_21var_mdat1_nonlogged = quantvoe::full_voe_pipeline(independent_variables = col21mdat1, dependent_variables = cohort1_abundances_nonlogged, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+voe_df_24var_mdat1_nonlogged = quantvoe::full_voe_pipeline(independent_variables = col24mdat1, dependent_variables = cohort1_abundances_nonlogged, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+
+saveRDS(list(voe_df_12var_mdat1_nonlogged,voe_df_15var_mdat1_nonlogged,voe_df_18var_mdat1_nonlogged,voe_df_21var_mdat1_nonlogged,voe_df_24var_mdat1_nonlogged),'nonlogged_cohort1_12_to_24_var_voe_T2D.rds')
 
 #### CLR transformation voe
 cohort1_abundances_nonlogged[,2:ncol(cohort1_abundances_nonlogged)] = clr(cohort1_abundances_nonlogged[,2:ncol(cohort1_abundances_nonlogged)])
@@ -145,6 +177,15 @@ voe_df_9var_mdat3_clr = quantvoe::full_voe_pipeline(independent_variables = col9
 voe_df_9var_meta_clr = quantvoe::full_voe_pipeline(independent_variables = col9_meta_analysis, dependent_variables = list(cohort1_abundances_clr,cohort2_abundances_clr,cohort3_abundances_clr), primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1, meta_analysis=TRUE)
 
 saveRDS(list(voe_df_9var_mdat1_clr,voe_df_9var_mdat2_clr,voe_df_9var_mdat3_clr,voe_df_9var_meta_clr),'clr_9var_voe_T2D.rds')
+
+### ADDING ADDITION SAMPLING FOR COHORT WITH THE MOST VARIABLES PER R2's SECOND SET OF REQUESTS
+voe_df_12var_mdat1_clr = quantvoe::full_voe_pipeline(independent_variables = col12mdat1, dependent_variables = cohort1_abundances_clr, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+voe_df_15var_mdat1_clr = quantvoe::full_voe_pipeline(independent_variables = col15mdat1, dependent_variables = cohort1_abundances_clr, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+voe_df_18var_mdat1_clr = quantvoe::full_voe_pipeline(independent_variables = col18mdat1, dependent_variables = cohort1_abundances_clr, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+voe_df_21var_mdat1_clr = quantvoe::full_voe_pipeline(independent_variables = col21mdat1, dependent_variables = cohort1_abundances_clr, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+voe_df_24var_mdat1_clr = quantvoe::full_voe_pipeline(independent_variables = col24mdat1, dependent_variables = cohort1_abundances_clr, primary_variable = 'study_condition', max_vibration_num=10000, fdr_cutoff = 1)
+
+saveRDS(list(voe_df_12var_mdat1_clr,voe_df_15var_mdat1_clr,voe_df_18var_mdat1_clr,voe_df_21var_mdat1_clr,voe_df_24var_mdat1_clr),'clr_cohort1_12_to_24_var_voe_T2D.rds')
 
 #### subsampling number of vibrations analysis
 voe_df_all_var_meta10 = quantvoe::full_voe_pipeline(independent_variables = list(cohort1_metadata,cohort2_metadata,cohort3_metadata), dependent_variables = list(cohort1_abundances,cohort2_abundances,cohort3_abundances), primary_variable = 'study_condition', max_vibration_num=10, fdr_cutoff = 1, meta_analysis=TRUE)
