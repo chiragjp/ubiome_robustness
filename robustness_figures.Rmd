@@ -183,8 +183,7 @@ voe_all_lit_vibs_frac = voe_all_lit_vibs %>% select(uid,phenotype,match) %>% gro
 voe_all_lit_vibs_frac = left_join(voe_all_lit_vibs_frac,counts)
 voe_all_lit_vibs_frac$name = paste(voe_all_lit_vibs_frac$phenotype,' (N = ',voe_all_lit_vibs_frac$freq,')',sep= '' )
 
-ggplot(data=voe_all_lit_vibs_frac, aes(x=fraction_matching, group=phenotype, fill=phenotype)) +
-    geom_density(adjust=1.5) +
+ggplot(data=voe_all_lit_vibs_frac, aes(x=fraction_matching, group=phenotype, fill=phenotype)) +geom_histogram() +
     facet_wrap(~name,scales = 'free') +
     theme(
       legend.position="none",
